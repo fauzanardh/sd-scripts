@@ -4033,12 +4033,16 @@ def _load_target_model(args: argparse.Namespace, weight_dtype, device="cpu", une
 # TODO remove this function in the future
 def transform_if_model_is_DDP(text_encoder, unet, network=None):
     # Transform text_encoder, unet and network from DistributedDataParallel
-    return (model.module if type(model) == DDP else model for model in [text_encoder, unet, network] if model is not None)
+    # Disabling this line because it prevents gradient synchronization
+    # return (model.module if type(model) == DDP else model for model in [text_encoder, unet, network] if model is not None)
+    return text_encoder, unet, network
 
 
 def transform_models_if_DDP(models):
     # Transform text_encoder, unet and network from DistributedDataParallel
-    return [model.module if type(model) == DDP else model for model in models if model is not None]
+    # Disabling this line because it prevents gradient sync
+    # return [model.module if type(model) == DDP else model for model in models if model is not None]
+    return models
 
 
 def load_target_model(args, weight_dtype, accelerator, unet_use_linear_projection_in_v2=False):
