@@ -10,6 +10,7 @@ import toml
 
 from tqdm import tqdm
 import torch
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 try:
     import intel_extension_for_pytorch as ipex
@@ -511,14 +512,18 @@ def train(args):
                         # else:
                         input_ids1 = input_ids1.to(accelerator.device)
                         input_ids2 = input_ids2.to(accelerator.device)
+
+                        te1 = text_encoder1.module if type(text_encoder1) == DDP else text_encoder1
+                        te2 = text_encoder2.module if type(text_encoder2) == DDP else text_encoder2
+
                         encoder_hidden_states1, encoder_hidden_states2, pool2 = train_util.get_hidden_states_sdxl(
                             args.max_token_length,
                             input_ids1,
                             input_ids2,
                             tokenizer1,
                             tokenizer2,
-                            text_encoder1,
-                            text_encoder2,
+                            te1,
+                            te2,
                             None if not args.full_fp16 else weight_dtype,
                         )
                 else:
