@@ -8,6 +8,9 @@ from multiprocessing import Value
 from typing import List
 import toml
 
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 from tqdm import tqdm
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
