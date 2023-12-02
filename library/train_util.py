@@ -124,6 +124,15 @@ IMAGE_TRANSFORMS = transforms.Compose(
 
 TEXT_ENCODER_OUTPUTS_CACHE_SUFFIX = "_te_outputs.npz"
 
+## SPECIALIZED SEPERATOR FOR MY DATASET
+SEPARATOR_PRIORITY = [
+    "nsfw",
+    "newest",
+    "new",
+    "old",
+    "oldest",
+]
+
 
 class ImageInfo:
     def __init__(self, image_key: str, num_repeats: int, caption: str, is_reg: bool, absolute_path: str) -> None:
@@ -649,6 +658,15 @@ class BaseDataset(torch.utils.data.Dataset):
         else:
             if subset.shuffle_caption or subset.token_warmup_step > 0 or subset.caption_tag_dropout_rate > 0:
                 tokens = [t.strip() for t in caption.strip().split(",")]
+                # check if the caption contains separator
+                # if so, split the caption by the separator and shuffle the 2nd part
+                start_tokens = []
+                for sep in SEPARATOR_PRIORITY:
+                    if sep in tokens:
+                        sep_index = tokens.index(sep)
+                        start_tokens = tokens[:sep_index + 1]
+                        tokens = tokens[sep_index + 1:]
+
                 if subset.token_warmup_step < 1:  # 初回に上書きする
                     subset.token_warmup_step = math.floor(subset.token_warmup_step * self.max_train_steps)
                 if subset.token_warmup_step and self.current_step < subset.token_warmup_step:
@@ -669,16 +687,20 @@ class BaseDataset(torch.utils.data.Dataset):
 
                 fixed_tokens = []
                 flex_tokens = tokens[:]
-                if subset.keep_tokens > 0:
-                    fixed_tokens = flex_tokens[: subset.keep_tokens]
-                    flex_tokens = tokens[subset.keep_tokens :]
+                # Disable fixed tokens for my dataset
+                # if subset.keep_tokens > 0:
+                #     fixed_tokens = flex_tokens[: subset.keep_tokens]
+                #     flex_tokens = tokens[subset.keep_tokens :]
 
                 if subset.shuffle_caption:
                     random.shuffle(flex_tokens)
 
                 flex_tokens = dropout_tags(flex_tokens)
 
+                start_caption = ", ".join(start_tokens)
                 caption = ", ".join(fixed_tokens + flex_tokens)
+                if start_caption:
+                    caption = start_caption + ", " + caption
 
             # textual inversion対応
             for str_from, str_to in self.replacements.items():
