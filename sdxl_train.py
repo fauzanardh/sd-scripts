@@ -661,7 +661,7 @@ def train(args):
                 else:
                     append_block_lr_to_logs(block_lrs, logs, lr_scheduler, args.optimizer_type)  # U-Net is included in block_lrs
 
-                accelerator.log(logs)
+                accelerator.log(logs, step=global_step)
 
             loss_recorder.add(epoch=epoch, step=step, loss=current_loss)
             avr_loss: float = loss_recorder.moving_average
@@ -673,7 +673,7 @@ def train(args):
 
         if args.logging_dir is not None:
             logs = {"loss/epoch": loss_recorder.moving_average}
-            accelerator.log(logs)
+            accelerator.log(logs, step=global_step)
 
         accelerator.wait_for_everyone()
 
