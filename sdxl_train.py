@@ -723,12 +723,9 @@ def train(args):
 
     accelerator.end_training()
 
-    if args.save_state:  # and is_main_process:
-        train_util.save_state_on_train_end(args, accelerator)
-
-    del accelerator  # この後メモリを使うのでこれは消す
-
     if is_main_process:
+        if args.save_state:
+            train_util.save_state_on_train_end(args, accelerator)
         src_path = src_stable_diffusion_ckpt if save_stable_diffusion_format else src_diffusers_model_path
         if args.enable_ema and not args.ema_save_only_ema_weights:
             temp_name = args.output_name
