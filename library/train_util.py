@@ -2379,8 +2379,8 @@ class EMAModel:
         #with torch.no_grad():
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
             tmp = (s_param - param)
-            # #print(torch.sum(tmp))
-            # # tmp will be a new tensor so we can do in-place
+            print(torch.sum(tmp))
+            # tmp will be a new tensor so we can do in-place
             tmp.mul_(one_minus_decay)
             s_param.sub_(tmp)
             # s_param.data.lerp_(param.data, one_minus_decay)
