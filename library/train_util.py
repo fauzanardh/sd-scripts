@@ -2375,8 +2375,8 @@ class EMAModel:
         self.inplace_lerp = partial(inplace_lerp, auto_move_device=allow_different_devices)
 
         # init state and step counter
-        self.register_buffer('initialized', torch.tensor(False))
-        self.register_buffer('current_step', torch.tensor(0))
+        self.initialized = False
+        self.current_step = 0
 
     def get_params_list(self, parameters: Iterable[torch.nn.Parameter]) -> List[torch.nn.Parameter]:
         parameters = list(parameters)
@@ -2410,7 +2410,7 @@ class EMAModel:
             return min(self.decay, self.decay * (1 - np.exp(-x * self.beta)))
 
     def step(self, parameters: Iterable[torch.nn.Parameter]) -> None:
-        current_step = self.current_step.item()
+        current_step = self.current_step
         self.current_step += 1
 
         if current_step % self.update_every != 0:
@@ -2419,7 +2419,7 @@ class EMAModel:
         if current_step <= self.update_after_step:
             self.copy_from(parameters)
         
-        if not self.initialized.item():
+        if not self.initialized:
             self.copy_to(parameters)
             self.initalized.data.copy_(torch.tensor(True))
         
