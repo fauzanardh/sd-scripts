@@ -2421,7 +2421,7 @@ class EMAModel:
         
         if not self.initialized:
             self.copy_to(parameters)
-            self.initalized.data.copy_(torch.tensor(True))
+            self.initalized = True
         
         self.update_moving_average(parameters, current_step)
         
