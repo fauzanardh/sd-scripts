@@ -402,7 +402,7 @@ def train(args):
     if args.enable_ema:
         #ema_dtype = weight_dtype if (args.full_bf16 or args.full_fp16) else torch.float
         ema = EMAModel(params_to_optimize, decay=args.ema_decay, beta=args.ema_exp_beta, max_train_steps=args.max_train_steps * args.gradient_accumulation_steps)
-        ema.to(dtype=weight_dtype)
+        ema.to(accelerator.device, dtype=weight_dtype)
         # ema = accelerator.prepare(ema)
     else: 
         ema = None
