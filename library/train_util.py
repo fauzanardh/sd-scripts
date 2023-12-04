@@ -2378,13 +2378,8 @@ class EMAModel:
         #print(f" {one_minus_decay}")
         #with torch.no_grad():
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            tmp = (s_param.data - param.data)
-            print(torch.sum(tmp))
-            # tmp will be a new tensor so we can do in-place
-            tmp.mul_(one_minus_decay)
-            s_param.data.sub_(tmp)
-            # s_param.data.lerp_(param.data, one_minus_decay)
-            print(f"step: {torch.sum(s_param.data) - torch.sum(param.data)} - {one_minus_decay}")
+            s_param.data.lerp_(param.data, one_minus_decay)
+        # print(f"step: {torch.sum(s_param.data) - torch.sum(param.data)} - {one_minus_decay}")
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
         """
