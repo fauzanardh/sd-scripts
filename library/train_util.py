@@ -2422,7 +2422,13 @@ class EMAModel:
         current_decay = self.get_decay(current_step)
 
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            self.inplace_lerp(s_param.data, param.data, 1 - current_decay)
+            # self.inplace_lerp(s_param.data, param.data, 1 - current_decay)
+            if self.allow_different_devices:
+                param_data = param.data.to(s_param.device)
+            else:
+                param_data = param.data
+            s_param.data.lerp_(param_data, 1 - current_decay)
+        print(f"update_moving_average diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {1 - current_decay}")
     
     def to(self, device=None, dtype=None) -> None:
         self.shadow_params = [
