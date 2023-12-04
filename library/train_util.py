@@ -2384,7 +2384,7 @@ class EMAModel:
         self.optimization_step += 1
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
             inplace_lerp(s_param.data, param.data, one_minus_decay)
-        print(f"params: {s_param.data} - {param.data}")
+        print(f"params: {s_param.data[0][0]} - {param.data[0][0]}")
         print(f"step: {torch.sum(s_param.data) - torch.sum(param.data)} - {one_minus_decay}")
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
