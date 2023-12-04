@@ -401,16 +401,9 @@ def train(args):
 
     if args.enable_ema:
         #ema_dtype = weight_dtype if (args.full_bf16 or args.full_fp16) else torch.float
-        ema = EMAModel(
-            params_to_optimize,
-            decay=args.ema_decay,
-            beta=args.ema_exp_beta,
-            max_train_steps=args.max_train_steps,
-            update_after_step=args.ema_update_after_step * args.gradient_accumulation_steps,
-            update_every=args.ema_update_every * args.gradient_accumulation_steps,
-        )
-        ema.to(dtype=weight_dtype)  # keep ema model on CPU
-        # ema = accelerator.prepare(ema)
+        ema = EMAModel(params_to_optimize, decay=args.ema_decay, beta=args.ema_exp_beta, max_train_steps=args.max_train_steps)
+        ema.to(accelerator.device, dtype=weight_dtype)
+        ema = accelerator.prepare(ema)
     else: 
         ema = None
     # acceleratorがなんかよろしくやってくれるらしい
@@ -725,6 +718,8 @@ def train(args):
     unet = accelerator.unwrap_model(unet)
     text_encoder1 = accelerator.unwrap_model(text_encoder1)
     text_encoder2 = accelerator.unwrap_model(text_encoder2)
+    if args.enable_ema:
+        ema = accelerator.unwrap_model(ema)
 
     accelerator.end_training()
 

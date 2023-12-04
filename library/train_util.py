@@ -4,7 +4,6 @@ import argparse
 import ast
 import asyncio
 import datetime
-from functools import partial
 import importlib
 import json
 import pathlib
@@ -2326,42 +2325,26 @@ def load_text_encoder_outputs_from_disk(npz_path):
 # endregion
 
 
-# based mostly on https://github.com/lucidrains/ema-pytorch/blob/main/ema_pytorch/ema_pytorch.py
+# based mostly on https://github.com/fadel/pytorch_ema/blob/master/torch_ema/ema.py
 class EMAModel:
     """
-    Implements exponential moving average shadowing for your model.
+    Maintains (exponential) moving average of a set of parameters.
     """
-    def __init__(self, 
-        parameters: Iterable[torch.nn.Parameter],
-        decay: float = 0.9999,
-        beta: int = 15,
-        max_train_steps: int = 10000,
-        update_after_step: int = 100,
-        update_every: int = 10,
-        allow_different_devices: bool = True,
-    ) -> None:
-        # Parameters
+    def __init__(self, parameters: Iterable[torch.nn.Parameter], decay: float, beta=0, max_train_steps=10000):
         parameters = self.get_params_list(parameters)
         self.shadow_params = [p.clone().detach() for p in parameters]
-        print(f"len(self.shadow_params): {len(self.shadow_params)}")
-
-        # Hyperparameters
         if decay < 0.0 or decay > 1.0:
-            raise ValueError('decay must be between 0 and 1')
+            raise ValueError('Decay must be between 0 and 1')
         self.decay = decay
+        self.optimization_step = 0
+        self.collected_params = None
         if beta < 0:
-            raise ValueError('beta must be positive')
+            raise ValueError('ema_exp_beta should be > 0')
         self.beta = beta
         self.max_train_steps = max_train_steps
-        self.update_after_step = update_after_step
-        self.update_every = update_every
-        self.allow_different_devices = allow_different_devices
+        print(f"len(self.shadow_params): {len(self.shadow_params)}")
 
-        # init state and step counter
-        self.initialized = False
-        self.current_step = 0
-
-    def get_params_list(self, parameters: Iterable[torch.nn.Parameter]) -> List[torch.nn.Parameter]:
+    def get_params_list(self, parameters: Iterable[torch.nn.Parameter]):
         parameters = list(parameters)
         if isinstance(parameters[0], dict):
             params_list = []
@@ -2370,73 +2353,104 @@ class EMAModel:
             return params_list
         else:
             return parameters
-    
-    def copy_from(self, parameters: Iterable[torch.nn.Parameter]) -> None:
-        parameters = self.get_params_list(parameters)
 
-        for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            if self.allow_different_devices:
-                param_data = param.data.to(s_param.device)
-            else:
-                param_data = param.data
-            s_param.data.copy_(param_data)
-        print(f"copy_from diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {1 - self.get_decay(self.current_step)}")
-    
-    def copy_to(self, parameters: Iterable[torch.nn.Parameter]) -> None:
-        parameters = self.get_params_list(parameters)
-
-        for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            if self.allow_different_devices:
-                s_param_data = s_param.data.to(param.device)
-            else:
-                s_param_data = s_param.data
-            param.data.copy_(s_param_data)
-        print(f"copy_to diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {1 - self.get_decay(self.current_step)}")
-
-    def get_decay(self, step: int) -> float:
+    def get_decay(self, optimization_step: int) -> float:
+        """
+        Get current decay for the exponential moving average.
+        """
         if self.beta == 0:
-            return min(self.decay, (1 + step) / (10 + step))
+            return min(self.decay, (1 + optimization_step) / (10 + optimization_step))
         else:
-            x = step / self.max_train_steps
+            # exponential schedule. scales to max_train_steps
+            x = optimization_step / self.max_train_steps
             return min(self.decay, self.decay * (1 - np.exp(-x * self.beta)))
 
     def step(self, parameters: Iterable[torch.nn.Parameter]) -> None:
-        current_step = self.current_step
-        self.current_step += 1
+        """
+        Update currently maintained parameters.
 
-        if current_step % self.update_every != 0:
-            return
-        
-        if current_step <= self.update_after_step:
-            self.copy_from(parameters)
-        
-        if not self.initialized:
-            self.copy_to(parameters)
-            self.initalized = True
-        
-        self.update_moving_average(parameters, current_step)
-        
-    @torch.no_grad()
-    def update_moving_average(self, parameters: Iterable[torch.nn.Parameter], current_step: int) -> None:
+        Call this every time the parameters are updated, such as the result of
+        the `optimizer.step()` call.
+        """
         parameters = self.get_params_list(parameters)
-        current_decay = self.get_decay(current_step)
-
+        one_minus_decay = 1.0 - self.get_decay(self.optimization_step)
+        self.optimization_step += 1
+        #print(f" {one_minus_decay}")
+        #with torch.no_grad():
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            # self.inplace_lerp(s_param.data, param.data, 1 - current_decay)
-            if self.allow_different_devices:
-                param_data = param.data.to(s_param.device)
-            else:
-                param_data = param.data
-            s_param.data.lerp_(param_data, 1 - current_decay)
-        print(f"update_moving_average diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {1 - current_decay}")
-    
+            tmp = (s_param - param)
+            #print(torch.sum(tmp))
+            # tmp will be a new tensor so we can do in-place
+            tmp.mul_(one_minus_decay)
+            s_param.sub_(tmp)
+
+    def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
+        """
+        Copy current averaged parameters into given collection of parameters.
+        """
+        parameters = self.get_params_list(parameters)
+        for s_param, param in zip(self.shadow_params, parameters, strict=True):
+            # print(f"diff: {torch.sum(s_param) - torch.sum(param)}")
+            param.data.copy_(s_param.data)
+
     def to(self, device=None, dtype=None) -> None:
+        r"""Move internal buffers of the ExponentialMovingAverage to `device`.
+        """
         self.shadow_params = [
-            p.to(device=device, dtype=dtype)
-            if p.is_floating_point()
+            p.to(device=device, dtype=dtype) 
+            if p.is_floating_point() 
             else p.to(device=device)
             for p in self.shadow_params
         ]
+        return
+
+    def store(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
+            """
+            Save the current parameters for restoring later.
+            """
+            parameters = self.get_params_list(parameters)
+            self.collected_params = [
+                param.clone()
+                for param in parameters
+            ]
+
+    def restore(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
+        """
+        Restore the parameters stored with the `store` method.
+        Useful to validate the model with EMA parameters without affecting the
+        original optimization process. Store the parameters before the
+        `copy_to` method. After validation (or model saving), use this to
+        restore the former parameters.
+        """
+        if self.collected_params is None:
+            raise RuntimeError(
+                "This ExponentialMovingAverage has no `store()`ed weights "
+                "to `restore()`"
+            )
+        parameters = self.get_params_list(parameters)
+        for c_param, param in zip(self.collected_params, parameters, strict=True):
+            param.data.copy_(c_param.data)
+
+    @contextlib.contextmanager
+    def ema_parameters(self, parameters: Iterable[torch.nn.Parameter] = None):
+        r"""
+        Context manager for validation/inference with averaged parameters.
+
+        Equivalent to:
+            ema.store()
+            ema.copy_to()
+            try:
+                ...
+            finally:
+                ema.restore()
+        """
+        parameters = self.get_params_list(parameters)
+        self.store(parameters)
+        self.copy_to(parameters)
+        try:
+            yield
+        finally:
+            self.restore(parameters)
 
 
 # region モジュール入れ替え部
@@ -3088,12 +3102,6 @@ def add_training_arguments(parser: argparse.ArgumentParser, support_dreambooth: 
     parser.add_argument(
         "--ema_exp_beta", type=float, default=15, help="Choose EMA decay schedule. By default: (1+x)/(10+x). If beta is set: use exponential schedule scaled to max_train_steps. If beta>0, recommended values are around 10-15 "
         + "/ EMAの減衰スケジュールを設定する。デフォルト：(1+x)/(10+x)。beta が設定されている場合: max_train_steps にスケーリングされた指数スケジュールを使用する。beta>0 の場合、推奨値は 10-15 程度。 "
-    )
-    parser.add_argument(
-        "--ema_update_after_step", type=int, default=100, help="Start EMA after this step / このステップ数経過後にEMAを開始する"
-    )
-    parser.add_argument(
-        "--ema_update_every", type=int, default=10, help="Update EMA every this step / このステップ数ごとにEMAを更新する"
     )
     parser.add_argument(
         "--ema_save_only_ema_weights", action="store_true", help="By default both EMA and non-EMA weights are saved. If enabled, saves only EMA / デフォルトでは、EMAウェイトと非EMAウェイトの両方が保存される。有効にすると、EMAのみが保存される "
