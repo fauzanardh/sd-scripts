@@ -4,6 +4,7 @@ import argparse
 import ast
 import asyncio
 import datetime
+from functools import partial
 import importlib
 import json
 import pathlib
@@ -2326,11 +2327,20 @@ def load_text_encoder_outputs_from_disk(npz_path):
 
 
 # based mostly on https://github.com/fadel/pytorch_ema/blob/master/torch_ema/ema.py
+def inplace_copy(source: torch.Tensor, target: torch.Tensor, auto_move_device: float=True) -> None:
+    if auto_move_device:
+        target = target.to(source.device)
+    source.copy_(target)
+
+def inplace_lerp(source: torch.Tensor, target: torch.Tensor, alpha: float, auto_move_device: float=True) -> None:
+    if auto_move_device:
+        target = target.to(source.device)
+    source.lerp_(target, alpha)
 class EMAModel:
     """
     Maintains (exponential) moving average of a set of parameters.
     """
-    def __init__(self, parameters: Iterable[torch.nn.Parameter], decay: float, beta=0, max_train_steps=10000):
+    def __init__(self, parameters: Iterable[torch.nn.Parameter], decay: float, beta=0, max_train_steps=10000, auto_move_device: bool=True):
         parameters = self.get_params_list(parameters)
         self.shadow_params = [p.clone().detach() for p in parameters]
         if decay < 0.0 or decay > 1.0:
@@ -2343,6 +2353,9 @@ class EMAModel:
         self.beta = beta
         self.max_train_steps = max_train_steps
         print(f"len(self.shadow_params): {len(self.shadow_params)}")
+
+        self.inplace_copy = partial(inplace_copy, auto_move_device=auto_move_device)
+        self.inplace_lerp = partial(inplace_lerp, auto_move_device=auto_move_device)
 
     def get_params_list(self, parameters: Iterable[torch.nn.Parameter]):
         parameters = list(parameters)
@@ -2378,12 +2391,13 @@ class EMAModel:
         #print(f" {one_minus_decay}")
         #with torch.no_grad():
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            tmp = (s_param - param)
-            #print(torch.sum(tmp))
-            # tmp will be a new tensor so we can do in-place
-            tmp.mul_(one_minus_decay)
-            s_param.sub_(tmp)
-        print(f"copy_to: {torch.sum(s_param) - torch.sum(param)} - {one_minus_decay}")
+            self.inplace_lerp(s_param, param, one_minus_decay)
+            # tmp = (s_param - param)
+            # #print(torch.sum(tmp))
+            # # tmp will be a new tensor so we can do in-place
+            # tmp.mul_(one_minus_decay)
+            # s_param.sub_(tmp)
+        print(f"step: {torch.sum(s_param) - torch.sum(param)} - {one_minus_decay}")
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
         """
@@ -2391,7 +2405,8 @@ class EMAModel:
         """
         parameters = self.get_params_list(parameters)
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            param.data.copy_(s_param.data)
+            # param.data.copy_(s_param.data)
+            self.inplace_copy(param, s_param)
         print(f"copy_to: {torch.sum(s_param) - torch.sum(param)} - {1 - self.get_decay(self.optimization_step)}")
 
     def to(self, device=None, dtype=None) -> None:
