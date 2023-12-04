@@ -606,9 +606,9 @@ def train(args):
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
-                if args.enable_ema:
-                    with torch.no_grad(), accelerator.autocast():
-                        ema.step(params_to_optimize)
+                # if args.enable_ema:
+                #     with torch.no_grad(), accelerator.autocast():
+                #         ema.step(params_to_optimize)
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
