@@ -2384,7 +2384,7 @@ class EMAModel:
             # tmp.mul_(one_minus_decay)
             # s_param.sub_(tmp)
             s_param.data.lerp_(param.data, one_minus_decay)
-        print(f"step: {torch.sum(s_param.data) - torch.sum(param.data)} - {one_minus_decay}")
+            print(f"step: {torch.sum(s_param.data) - torch.sum(param.data)} - {one_minus_decay}")
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
         """
