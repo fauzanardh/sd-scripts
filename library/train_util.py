@@ -2393,14 +2393,14 @@ class EMAModel:
 
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
             self.inplace_copy(s_param.data, param.data)
-            print(f"copy_from diff: {torch.sum(s_param) - torch.sum(param)}")
+        print(f"copy_from diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {self.get_decay(self.current_step)}")
     
     def copy_to(self, parameters: Iterable[torch.nn.Parameter]) -> None:
         parameters = self.get_params_list(parameters)
 
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
             self.inplace_copy(param.data, s_param.data)
-            print(f"copy_to diff: {torch.sum(s_param) - torch.sum(param)}")
+        print(f"copy_to diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {self.get_decay(self.current_step)}")
 
     def get_decay(self, step: int) -> float:
         if self.beta == 0:
