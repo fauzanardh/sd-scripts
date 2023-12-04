@@ -2365,6 +2365,7 @@ class EMAModel:
             x = optimization_step / self.max_train_steps
             return min(self.decay, self.decay * (1 - np.exp(-x * self.beta)))
 
+    @torch.no_grad()
     def step(self, parameters: Iterable[torch.nn.Parameter]) -> None:
         """
         Update currently maintained parameters.
@@ -2372,15 +2373,12 @@ class EMAModel:
         Call this every time the parameters are updated, such as the result of
         the `optimizer.step()` call.
         """
-        pass
-        # parameters = self.get_params_list(parameters)
-        # one_minus_decay = 1.0 - self.get_decay(self.optimization_step)
-        # self.optimization_step += 1
-        # #print(f" {one_minus_decay}")
-        # #with torch.no_grad():
-        # for s_param, param in zip(self.shadow_params, parameters, strict=True):
-        #     s_param.data.lerp_(param.data, one_minus_decay)
-        # print(f"step: {torch.sum(s_param.data) - torch.sum(param.data)} - {one_minus_decay}")
+        parameters = self.get_params_list(parameters)
+        one_minus_decay = 1.0 - self.get_decay(self.optimization_step)
+        self.optimization_step += 1
+        for s_param, param in zip(self.shadow_params, parameters, strict=True):
+            s_param.data.lerp_(param.data, one_minus_decay)
+        print(f"step: {torch.sum(s_param.data) - torch.sum(param.data)} - {one_minus_decay}")
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
         """
