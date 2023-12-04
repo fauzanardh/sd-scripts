@@ -2326,6 +2326,14 @@ def load_text_encoder_outputs_from_disk(npz_path):
 
 
 # based mostly on https://github.com/fadel/pytorch_ema/blob/master/torch_ema/ema.py
+def inplace_copy(src: torch.Tensor, dst: torch.Tensor) -> None:
+    dst = dst.to(src.device)
+    src.copy_(dst)
+
+def inplace_lerp(src: torch.Tensor, dst: torch.Tensor, alpha: float) -> None:
+    dst = dst.to(src.device)
+    src.lerp_(dst, alpha)
+    
 class EMAModel:
     """
     Maintains (exponential) moving average of a set of parameters.
@@ -2377,7 +2385,7 @@ class EMAModel:
         one_minus_decay = 1.0 - self.get_decay(self.optimization_step)
         self.optimization_step += 1
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            s_param.data.lerp_(param.data, one_minus_decay)
+            inplace_lerp(s_param.data, param.data, one_minus_decay)
         print(f"step: {torch.sum(s_param.data) - torch.sum(param.data)} - {one_minus_decay}")
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
@@ -2386,7 +2394,7 @@ class EMAModel:
         """
         parameters = self.get_params_list(parameters)
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            param.data.copy_(s_param.data)
+            inplace_copy(param.data, s_param.data)
         # print(f"copy_to: {torch.sum(s_param) - torch.sum(param)} - {1 - self.get_decay(self.optimization_step)}")
 
     def to(self, device=None, dtype=None) -> None:
