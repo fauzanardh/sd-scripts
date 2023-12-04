@@ -3093,6 +3093,12 @@ def add_training_arguments(parser: argparse.ArgumentParser, support_dreambooth: 
         + "/ EMAの減衰スケジュールを設定する。デフォルト：(1+x)/(10+x)。beta が設定されている場合: max_train_steps にスケーリングされた指数スケジュールを使用する。beta>0 の場合、推奨値は 10-15 程度。 "
     )
     parser.add_argument(
+        "--ema_update_after_step", type=int, default=100, help="Start EMA after this step / このステップ数経過後にEMAを開始する"
+    )
+    parser.add_argument(
+        "--ema_update_every", type=int, default=10, help="Update EMA every this step / このステップ数ごとにEMAを更新する"
+    )
+    parser.add_argument(
         "--ema_save_only_ema_weights", action="store_true", help="By default both EMA and non-EMA weights are saved. If enabled, saves only EMA / デフォルトでは、EMAウェイトと非EMAウェイトの両方が保存される。有効にすると、EMAのみが保存される "
     )
     parser.add_argument(
