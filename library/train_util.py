@@ -2383,8 +2383,8 @@ class EMAModel:
             # # tmp will be a new tensor so we can do in-place
             # tmp.mul_(one_minus_decay)
             # s_param.sub_(tmp)
-            s_param.lerp_(param, one_minus_decay)
-        print(f"copy_to: {torch.sum(s_param) - torch.sum(param)} - {one_minus_decay}")
+            s_param.data.lerp_(param, one_minus_decay)
+        print(f"step: {torch.sum(s_param) - torch.sum(param)} - {one_minus_decay}")
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
         """
@@ -2393,7 +2393,7 @@ class EMAModel:
         parameters = self.get_params_list(parameters)
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
             param.data.copy_(s_param.data)
-        print(f"copy_to: {torch.sum(s_param) - torch.sum(param)} - {1 - self.get_decay(self.optimization_step)}")
+        # print(f"copy_to: {torch.sum(s_param) - torch.sum(param)} - {1 - self.get_decay(self.optimization_step)}")
 
     def to(self, device=None, dtype=None) -> None:
         r"""Move internal buffers of the ExponentialMovingAverage to `device`.
