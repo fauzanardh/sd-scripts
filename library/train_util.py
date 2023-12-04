@@ -2327,20 +2327,6 @@ def load_text_encoder_outputs_from_disk(npz_path):
 
 
 # based mostly on https://github.com/lucidrains/ema-pytorch/blob/main/ema_pytorch/ema_pytorch.py
-def inplace_copy(src: torch.Tensor, tgt: torch.Tensor, *, auto_move_device: bool = False):
-    if auto_move_device:
-        tgt = tgt.to(src.device)
-
-    src.copy_(tgt)
-
-
-def inplace_lerp(src: torch.Tensor, tgt: torch.Tensor, weight: float, *, auto_move_device: bool = False):
-    if auto_move_device:
-        tgt = tgt.to(src.device)
-
-    src.lerp_(tgt, weight)
-
-
 class EMAModel:
     """
     Implements exponential moving average shadowing for your model.
@@ -2369,10 +2355,7 @@ class EMAModel:
         self.max_train_steps = max_train_steps
         self.update_after_step = update_after_step
         self.update_every = update_every
-
-        # Tensor update function
-        self.inplace_copy = partial(inplace_copy, auto_move_device=allow_different_devices)
-        self.inplace_lerp = partial(inplace_lerp, auto_move_device=allow_different_devices)
+        self.allow_different_devices = allow_different_devices
 
         # init state and step counter
         self.initialized = False
@@ -2392,15 +2375,23 @@ class EMAModel:
         parameters = self.get_params_list(parameters)
 
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            self.inplace_copy(s_param.data, param.data)
-        print(f"copy_from diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {self.get_decay(self.current_step)}")
+            if self.allow_different_devices:
+                param_data = param.data.to(s_param.device)
+            else:
+                param_data = param.data
+            s_param.data.copy_(param_data)
+        print(f"copy_from diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {1 - self.get_decay(self.current_step)}")
     
     def copy_to(self, parameters: Iterable[torch.nn.Parameter]) -> None:
         parameters = self.get_params_list(parameters)
 
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            self.inplace_copy(param.data, s_param.data)
-        print(f"copy_to diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {self.get_decay(self.current_step)}")
+            if self.allow_different_devices:
+                s_param_data = s_param.data.to(param.device)
+            else:
+                s_param_data = s_param.data
+            param.data.copy_(s_param_data)
+        print(f"copy_to diff: {torch.sum(s_param.data) - torch.sum(param.data)} - {1 - self.get_decay(self.current_step)}")
 
     def get_decay(self, step: int) -> float:
         if self.beta == 0:
