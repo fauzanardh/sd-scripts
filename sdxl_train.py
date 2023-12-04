@@ -607,7 +607,8 @@ def train(args):
                 lr_scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
                 if args.enable_ema:
-                    ema.step(params_to_optimize)
+                    with accelerator.autocast():
+                        ema.step(params_to_optimize)
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
