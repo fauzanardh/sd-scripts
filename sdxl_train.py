@@ -365,7 +365,7 @@ def train(args):
         shuffle=True,
         collate_fn=collator,
         num_workers=n_workers,
-        prefetch_factor=8,
+        prefetch_factor=4,
         persistent_workers=args.persistent_data_loader_workers,
     )
 
