@@ -8,6 +8,9 @@ from multiprocessing import Value
 from typing import List
 import toml
 
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 from tqdm import tqdm
 import torch
 
@@ -360,6 +363,7 @@ def train(args):
         shuffle=True,
         collate_fn=collator,
         num_workers=n_workers,
+        prefetch_factor=4,
         persistent_workers=args.persistent_data_loader_workers,
     )
 
