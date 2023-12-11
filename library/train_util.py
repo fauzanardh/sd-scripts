@@ -3980,10 +3980,7 @@ def prepare_accelerator(args: argparse.Namespace):
         None if args.ddp_timeout is None else [InitProcessGroupKwargs(timeout=datetime.timedelta(minutes=args.ddp_timeout))]
     )
     # Fix 'Parameters which did not receive grad for rank x' error
-    if kwargs_handlers is not None:
-        kwargs_handlers.append(DistributedDataParallelKwargs(find_unused_parameters=True))
-    else:
-        kwargs_handlers = [DistributedDataParallelKwargs(find_unused_parameters=True)]
+    kwargs_handlers += [DistributedDataParallelKwargs(find_unused_parameters=True)]
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
