@@ -20,7 +20,7 @@ from typing import (
     Union,
     Iterable,
 )
-from accelerate import Accelerator, InitProcessGroupKwargs, DistributedDataParallelKwargs
+from accelerate import Accelerator, InitProcessGroupKwargs
 import gc
 import glob
 import math
@@ -3979,8 +3979,6 @@ def prepare_accelerator(args: argparse.Namespace):
     kwargs_handlers = (
         None if args.ddp_timeout is None else [InitProcessGroupKwargs(timeout=datetime.timedelta(minutes=args.ddp_timeout))]
     )
-    # Fix 'Parameters which did not receive grad for rank x' error
-    kwargs_handlers += [DistributedDataParallelKwargs(find_unused_parameters=True)]
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
