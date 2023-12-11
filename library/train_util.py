@@ -20,7 +20,7 @@ from typing import (
     Union,
     Iterable,
 )
-from accelerate import Accelerator, InitProcessGroupKwargs
+from accelerate import Accelerator, InitProcessGroupKwargs, DistributedDataParallelKwargs
 import gc
 import glob
 import math
@@ -3979,6 +3979,10 @@ def prepare_accelerator(args: argparse.Namespace):
     kwargs_handlers = (
         None if args.ddp_timeout is None else [InitProcessGroupKwargs(timeout=datetime.timedelta(minutes=args.ddp_timeout))]
     )
+    if kwargs_handlers is not None:
+        kwargs_handlers.append(DistributedDataParallelKwargs(gradient_as_bucket_view=True, static_graph=True))
+    else:
+        kwargs_handlers = [DistributedDataParallelKwargs(gradient_as_bucket_view=True, static_graph=True)]
     accelerator = Accelerator(
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
