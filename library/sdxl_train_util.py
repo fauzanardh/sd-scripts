@@ -309,6 +309,8 @@ def save_sd_model_on_epoch_end_or_stepwise(
     if args.enable_ema and not args.ema_save_only_ema_weights and ema:
         temp_name = args.output_name
         args.output_name = args.output_name + "-non-EMA"
+    else:
+        temp_name = None
 
     train_util.save_sd_model_on_epoch_end_or_stepwise_common(
         args,
