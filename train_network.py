@@ -12,6 +12,7 @@ import toml
 
 from tqdm import tqdm
 import torch
+from library.train_util import EMAModel
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 try:
@@ -394,6 +395,13 @@ class NetworkTrainer:
         for t_enc in text_encoders:
             t_enc.requires_grad_(False)
 
+        if args.enable_ema:
+            ema_dtype = weight_dtype if (args.full_bf16 or args.full_fp16) else torch.float
+            ema = EMAModel(network.parameters(), decay=args.ema_decay, beta=args.ema_exp_beta, max_train_steps=args.max_train_steps)
+            ema.to(accelerator.device, dtype=ema_dtype)
+            ema = accelerator.prepare(ema)
+        else:
+            ema = None
         # acceleratorがなんかよろしくやってくれるらしい
         # TODO めちゃくちゃ冗長なのでコードを整理する
         if train_unet:
@@ -515,6 +523,9 @@ class NetworkTrainer:
             "ss_scale_weight_norms": args.scale_weight_norms,
             "ss_ip_noise_gamma": args.ip_noise_gamma,
             "ss_debiased_estimation": bool(args.debiased_estimation_loss),
+            "ss_enable_ema": bool(args.enable_ema),
+            "ss_ema_decay": args.ema_decay,
+            "ss_ema_exp_beta": args.ema_exp_beta,
         }
 
         if use_user_config:
@@ -814,6 +825,9 @@ class NetworkTrainer:
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad(set_to_none=True)
+                    if args.enable_ema:
+                        with torch.no_grad(), accelerator.autocast():
+                            ema.step(network.parameters())
 
                 if args.scale_weight_norms:
                     keys_scaled, mean_norm, maximum_norm = accelerator.unwrap_model(network).apply_max_norm_regularization(
@@ -835,7 +849,15 @@ class NetworkTrainer:
                         accelerator.wait_for_everyone()
                         if accelerator.is_main_process:
                             ckpt_name = train_util.get_step_ckpt_name(args, "." + args.save_model_as, global_step)
-                            save_model(ckpt_name, accelerator.unwrap_model(network), global_step, epoch)
+                            if args.enable_ema:
+                                if not args.ema_save_only_ema_weights:
+                                    temp_name = train_util.get_step_ckpt_name(args, "", global_step) + "-non-EMA" + "." + args.save_model_as
+                                    save_model(temp_name, accelerator.unwrap_model(network), global_step, epoch)
+                                with ema.ema_parameters(network.parameters()):
+                                    print("Saving EMA:")
+                                    save_model(ckpt_name, accelerator.unwrap_model(network), global_step, epoch)
+                            else:    
+                                save_model(ckpt_name, accelerator.unwrap_model(network), global_step, epoch)
 
                             if args.save_state:
                                 train_util.save_and_remove_state_stepwise(args, accelerator, global_step)
@@ -856,6 +878,9 @@ class NetworkTrainer:
 
                 if args.logging_dir is not None:
                     logs = self.generate_step_logs(args, current_loss, avr_loss, lr_scheduler, keys_scaled, mean_norm, maximum_norm)
+                    #if args.enable_ema:
+                    #    logs["loss/ema_decay"] = ema.get_decay(global_step)
+                    #    # logs["lr/lr*(1-ema_decay)"] = float(lr_scheduler.get_last_lr()[0]) * (1.0 - ema.get_decay(global_step))
                     accelerator.log(logs, step=global_step)
 
                 if global_step >= args.max_train_steps:
@@ -872,7 +897,15 @@ class NetworkTrainer:
                 saving = (epoch + 1) % args.save_every_n_epochs == 0 and (epoch + 1) < num_train_epochs
                 if is_main_process and saving:
                     ckpt_name = train_util.get_epoch_ckpt_name(args, "." + args.save_model_as, epoch + 1)
-                    save_model(ckpt_name, accelerator.unwrap_model(network), global_step, epoch + 1)
+                    if args.enable_ema:
+                        if not args.ema_save_only_ema_weights:
+                            temp_name = train_util.get_epoch_ckpt_name(args, "", epoch + 1) + "-non-EMA" + "." + args.save_model_as
+                            save_model(temp_name, accelerator.unwrap_model(network), global_step, epoch + 1)
+                        with ema.ema_parameters(network.parameters()):
+                            print("Saving EMA:")
+                            save_model(ckpt_name, accelerator.unwrap_model(network), global_step, epoch + 1)
+                    else:
+                        save_model(ckpt_name, accelerator.unwrap_model(network), global_step, epoch + 1)
 
                     remove_epoch_no = train_util.get_remove_epoch_no(args, epoch + 1)
                     if remove_epoch_no is not None:
@@ -891,6 +924,8 @@ class NetworkTrainer:
 
         if is_main_process:
             network = accelerator.unwrap_model(network)
+            if args.enable_ema:
+                ema = accelerator.unwrap_model(ema)
 
         accelerator.end_training()
 
@@ -899,6 +934,12 @@ class NetworkTrainer:
 
         if is_main_process:
             ckpt_name = train_util.get_last_ckpt_name(args, "." + args.save_model_as)
+            if args.enable_ema and not args.ema_save_only_ema_weights:
+                temp_name = train_util.get_last_ckpt_name(args, "") + "-non-EMA" + "." + args.save_model_as
+                save_model(temp_name, network, global_step, num_train_epochs, force_sync_upload=True)
+            if args.enable_ema:
+                print("Saving EMA:")
+                ema.copy_to(network.parameters())
             save_model(ckpt_name, network, global_step, num_train_epochs, force_sync_upload=True)
 
             print("model saved.")
