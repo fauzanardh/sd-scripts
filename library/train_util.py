@@ -2354,10 +2354,10 @@ class EMAModel:
         parameters = self.get_params_list(parameters)
         one_minus_decay = 1.0 - self.get_decay(self.optimization_step)
         self.optimization_step += 1
-        #print(f" {one_minus_decay}")
-        #with torch.no_grad():
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            s_param.lerp_(param, one_minus_decay)
+            # clone param and set the dtype to s_param.dtype
+            tmp_param = param.clone().detach().to(dtype=s_param.dtype)
+            s_param.data.lerp_(tmp_param.data, one_minus_decay)
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter] = None) -> None:
         """
@@ -2365,8 +2365,9 @@ class EMAModel:
         """
         parameters = self.get_params_list(parameters)
         for s_param, param in zip(self.shadow_params, parameters, strict=True):
-            # print(f"diff: {torch.sum(s_param) - torch.sum(param)}")
-            param.data.copy_(s_param.data)
+            # clone s_param and set the dtype to param.dtype
+            tmp_param = s_param.clone().detach().to(dtype=param.dtype)
+            param.data.copy_(tmp_param.data)
 
     def to(self, device=None, dtype=None) -> None:
         r"""Move internal buffers of the ExponentialMovingAverage to `device`.
