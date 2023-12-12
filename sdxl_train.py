@@ -677,7 +677,7 @@ def train(args):
 
         if args.logging_dir is not None:
             logs = {"loss/epoch": loss_recorder.moving_average}
-            accelerator.log(logs, step=epoch + 1)
+            accelerator.log(logs, step=global_step)
 
         accelerator.wait_for_everyone()
 
