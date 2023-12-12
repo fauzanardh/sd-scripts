@@ -4133,7 +4133,7 @@ def get_hidden_states(args: argparse.Namespace, input_ids, tokenizer, text_encod
 
 
 def pool_workaround(
-    text_encoder: CLIPTextModelWithProjection, last_hidden_state: torch.Tensor, input_ids: torch.Tensor, eos_token_id: int
+    text_projection: torch.nn.Module, last_hidden_state: torch.Tensor, input_ids: torch.Tensor, eos_token_id: int
 ):
     r"""
     workaround for CLIP's pooling bug: it returns the hidden states for the max token id as the pooled output
@@ -4169,7 +4169,7 @@ def pool_workaround(
     pooled_output = last_hidden_state[torch.arange(last_hidden_state.shape[0], device=last_hidden_state.device), eos_token_index]
 
     # apply projection: projection may be of different dtype than last_hidden_state
-    pooled_output = text_encoder.text_projection(pooled_output.to(text_encoder.text_projection.weight.dtype))
+    pooled_output = text_projection(pooled_output.to(text_projection.weight.dtype))
     pooled_output = pooled_output.to(last_hidden_state.dtype)
 
     return pooled_output
@@ -4200,8 +4200,8 @@ def get_hidden_states_sdxl(
     hidden_states2 = enc_out["hidden_states"][-2]  # penuultimate layer
 
     # pool2 = enc_out["text_embeds"]
-    unwrapped_text_encoder2 = text_encoder2 if accelerator is None else accelerator.unwrap_model(text_encoder2)
-    pool2 = pool_workaround(unwrapped_text_encoder2, enc_out["last_hidden_state"], input_ids2, tokenizer2.eos_token_id)
+    text_projection = text_encoder2.text_projection if accelerator is None else accelerator.unwrap_model(text_encoder2).text_projection
+    pool2 = pool_workaround(text_projection, enc_out["last_hidden_state"], input_ids2, tokenizer2.eos_token_id)
 
     # b*n, 77, 768 or 1280 -> b, n*77, 768 or 1280
     n_size = 1 if max_token_length is None else max_token_length // 75
