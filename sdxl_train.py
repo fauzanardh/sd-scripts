@@ -519,8 +519,8 @@ def train(args):
                         input_ids1 = input_ids1.to(accelerator.device)
                         input_ids2 = input_ids2.to(accelerator.device)
 
-                        te1 = accelerator.unwrap_model(text_encoder1)
-                        te2 = accelerator.unwrap_model(text_encoder2)
+                        te1 = text_encoder1.module if type(text_encoder1) == DDP else text_encoder1
+                        te2 = text_encoder2.module if type(text_encoder2) == DDP else text_encoder2
 
                         # unwrap_model is fine for models not wrapped by accelerator
                         encoder_hidden_states1, encoder_hidden_states2, pool2 = train_util.get_hidden_states_sdxl(
